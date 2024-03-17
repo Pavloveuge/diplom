@@ -1,0 +1,32 @@
+num_diffusion_trainig_steps: 200
+num_epochs: 100
+
+path_to_train_dataset: /diplom/diplom/emb_manifest.json
+path_to_val_dataset: 
+
+alphabet: "абвгдеёжзийклмнопрстуфхцчшщъыьэюя "
+text_processor: !new:text_processor.TextProcessor
+  alphabet: !ref <alphabet>
+
+dataset: !new:embedding_dataset.EmbeddingDataset
+  text_processor: !ref <text_processor>
+  path_to_manifest: !ref <path_to_train_dataset>
+
+collate_fn: !name:data_collator.custom_collate_function
+
+noise_schedule: !new:diffusers.DDPMScheduler
+  num_trainig_steps: !ref <num_diffusion_trainig_steps>
+
+output_dir: checkpoints
+mixed_precision: torch.float16
+gradient_accumulation_steps: 1
+batch_size: 16
+gradient_clip_norm: 10
+
+model: 
+
+
+optimizer: !name:torch.optim.Adam
+  lr: 0.001
+lr_scheduler_type: linear
+warmup_steps: 10000
