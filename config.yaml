@@ -1,10 +1,10 @@
 num_diffusion_trainig_steps: 200
 num_epochs: 100
 
-path_to_train_dataset: /diplom/diplom/emb_manifest.json
-path_to_val_dataset: 
+path_to_train_dataset: /diplom/diplom/emb_train_librispeech_100_manifest.json
+#path_to_val_dataset: 
 
-alphabet: "абвгдеёжзийклмнопрстуфхцчшщъыьэюя "
+alphabet: "abcdefghijklmnopqrstuvwxyz "
 text_processor: !new:text_processor.TextProcessor
   alphabet: !ref <alphabet>
 
@@ -15,15 +15,36 @@ dataset: !new:embedding_dataset.EmbeddingDataset
 collate_fn: !name:data_collator.custom_collate_function
 
 noise_schedule: !new:diffusers.DDPMScheduler
-  num_trainig_steps: !ref <num_diffusion_trainig_steps>
+  num_train_timesteps: !ref <num_diffusion_trainig_steps>
 
 output_dir: checkpoints
-mixed_precision: torch.float16
+mixed_precision: fp16
+dtype: !name:torch.float32
 gradient_accumulation_steps: 1
 batch_size: 16
 gradient_clip_norm: 10
 
-model: 
+drop_cond_prob: 0.1
+
+# параметры для модели
+cond_emb_dim: 768
+dim_ae: 64
+num_encoder_latents: 32
+dim: 768 # размерность трансформера
+conv_pos: 32
+conv_pos_groups: 4
+t_emb_dim: 768
+t_emb_max_period: 10000 
+cond_cross_attn_layers: [0, 3, 6, 9]
+nheads: 8
+layers: 12
+dropout: 0.1
+attention_type: normal
+# просто скопировал параметры, не юзаю их
+wavlm_num_bucket: 140
+wavlm_max_dist: 280
+model: !name:model.NoisePredictor 
+
 
 
 optimizer: !name:torch.optim.Adam

@@ -9,6 +9,7 @@ class EmbeddingDataset(Dataset):
         self.text_processor = text_processor
         self.manifest = json.load(open(path_to_manifest, "r"))
 
+
     def __getitem__(self, ind):
         # непонятно, что будет, со скоростью, если каждый раз читать с диска, может быть больно
         audio_embedding = torch.tensor(torch.load(self.manifest[ind]['audio_emb_path']))
