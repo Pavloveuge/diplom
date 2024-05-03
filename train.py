@@ -5,6 +5,7 @@ from train_loop import train_loop
 from torch.utils.data import DataLoader
 from model import NoisePredictor
 from text_vae import BARTForConditionalGenerationLatent
+from transformers import Wav2Vec2FeatureExtractor, Wav2Vec2Model
 
 
 def train(config):
@@ -15,10 +16,16 @@ def train(config):
     num_training_steps=len(dataset) * config['num_epochs'] // config['batch_size'])
 
     train_dataloader = DataLoader(dataset, batch_size=config['batch_size'], collate_fn=config['collate_fn'])
+
+    model_name = "facebook/wav2vec2-base-960h"
+    feature_extractor = Wav2Vec2FeatureExtractor.from_pretrained(model_name)
+    audio_embedder = Wav2Vec2Model.from_pretrained(model_name).to("cuda")
     
     train_loop(
         config=config,
         model=model,
+        feature_extractor=feature_extractor,
+        audio_embedder=audio_embedder,
         noise_scheduler=config['noise_schedule'],
         optimizer=optimizer,
         train_dataloader=train_dataloader,

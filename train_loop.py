@@ -6,7 +6,7 @@ from accelerate import Accelerator
 from tqdm import tqdm
 
 
-def train_loop(config, model, noise_scheduler, optimizer, train_dataloader, lr_scheduler):
+def train_loop(config, model, feature_extractor, audio_embedder, noise_scheduler, optimizer, train_dataloader, lr_scheduler):
     # Initialize accelerator and tensorboard logging
     accelerator = Accelerator(
         mixed_precision=config['mixed_precision'],
@@ -23,11 +23,13 @@ def train_loop(config, model, noise_scheduler, optimizer, train_dataloader, lr_s
     # Prepare everything
     # There is no specific order to remember, you just need to unpack the 
     # objects in the same order you gave them to the prepare method.
-    model, optimizer, train_dataloader, lr_scheduler = accelerator.prepare(
-        model, optimizer, train_dataloader, lr_scheduler
+    model, optimizer, train_dataloader, lr_scheduler, feature_extractor, audio_embedder = accelerator.prepare(
+        model, optimizer, train_dataloader, lr_scheduler, feature_extractor, audio_embedder
     )
     
     model.to(accelerator.device, dtype=config['dtype'])
+    audio_embedder.to(accelerator.device, dtype=config['dtype'])
+
 
     global_step = 0
 
@@ -37,10 +39,16 @@ def train_loop(config, model, noise_scheduler, optimizer, train_dataloader, lr_s
         progress_bar.set_description(f"Epoch {epoch}")
 
         for step, batch in enumerate(train_dataloader):
-            audio_embedding = batch['audio_embedding']
+            audio = batch['audio']
             text_embedding = batch['text_embedding']
             text_inds = batch['text_inds']
-            cond_padding_mask = batch['cond_padding_mask']
+
+            audio = [i.cpu().numpy() for i in audio]
+            features = feature_extractor(raw_speech=audio, padding="longest", sampling_rate=16000, return_tensors="pt")['input_values']
+
+            features = features.to(accelerator.device)
+            with torch.no_grad():
+                audio_embedding = audio_embedder(features).last_hidden_state.detach()
 
             noise = torch.randn(text_embedding.shape).to(text_embedding.device)
             bs = audio_embedding.shape[0]
@@ -54,7 +62,7 @@ def train_loop(config, model, noise_scheduler, optimizer, train_dataloader, lr_s
             
             with accelerator.accumulate(model):
                 # Predict the noise residual
-                noise_pred = model(noisy_text_embedding, timesteps, audio_embedding, mask, cond_padding_mask)
+                noise_pred = model(x=noisy_text_embedding, t=timesteps, cond_emb=audio_embedding, mask=mask)
                 loss = F.mse_loss(noise_pred, noise)
                 accelerator.backward(loss)
 
@@ -71,4 +79,5 @@ def train_loop(config, model, noise_scheduler, optimizer, train_dataloader, lr_s
 
         if accelerator.is_main_process:
             # в оригинале здесь валидация и сохранение чекпоинтов
-            pass
+            if (epoch % config['save_checkpoint_every_epoch'] == 0) and (epoch != 0):
+                torch.save(model.state_dict(), f"{config['output_dir']}/noise_predictor_epoch_{epoch}")

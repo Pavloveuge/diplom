@@ -245,13 +245,12 @@ class NoisePredictor(nn.Module):
 
 
 
-    def forward(self, x: Tensor, t: Tensor, cond_emb: Tensor, mask: Tensor, cond_padding_mask: Tensor) -> Tensor:
+    def forward(self, x: Tensor, t: Tensor, cond_emb: Tensor, mask: Tensor) -> Tensor:
         """ Transformer with conditioning cross attention.
         - `x`: (bs, l, d_lm) - embeds from text vae
         - `t`: (bs, ) long tensor of timestep indices
         - `cond_emb`: (bs, seq_len2, cond_emb_dim)
         - `x_padding_mask`: (bs, num_encoder_latents) - all ones, because vae outputs has constant shapes
-        - `cond_padding_mask`: маска т.к вектора из аудиоэмбеддера разной длины
 
         Returns logits (bs, seq_len, vocab_size)
         """
@@ -267,21 +266,11 @@ class NoisePredictor(nn.Module):
         else:
             # never randomly zero when in eval mode
             zero_cond_inds = torch.zeros_like(t, dtype=torch.bool)
-            if cond_padding_mask.all():
-                # BUT, if all cond information is padded then we are obviously doing unconditional synthesis,
-                # so, force zero_cond_inds to be all ones
-                zero_cond_inds = ~zero_cond_inds
 
         # set mask for these conditional entries to true everywhere (i.e. mask them out)
         pooled_cond_emb = cond_emb.mean(dim=1)
         cond_emb = self.conditioning_pos_emb(cond_emb)
 
-        if cond_padding_mask.all() == False:
-            denoms = ((~cond_padding_mask).sum(dim=1)[:, None]).to(cond_emb.dtype)
-            scaler = (cond_emb.shape[1]/denoms)
-            pooled_cond_emb *= scaler
-
-        cond_padding_mask[zero_cond_inds] = True
         cond_emb[zero_cond_inds] = 0
         pooled_cond_emb[zero_cond_inds] = 0
         

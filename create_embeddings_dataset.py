@@ -8,8 +8,6 @@ import torch
 from transformers.models.bart.modeling_bart import BartForConditionalGeneration
 from text_vae import BARTForConditionalGenerationLatent
 from transformers import AutoTokenizer
-from transformers.models.bart.modeling_bart import BartForConditionalGeneration
-from text_vae import BARTForConditionalGenerationLatent
 from tqdm import tqdm
 
 
@@ -18,31 +16,32 @@ from tqdm import tqdm
 def main(args):
     with open(args.path_to_manifest) as f:
         manifest = [json.loads(line) for line in f]
-    model_name = "facebook/wav2vec2-base-960h"
-    feature_extractor = Wav2Vec2FeatureExtractor.from_pretrained(model_name)
-    model = Wav2Vec2Model.from_pretrained(model_name).to("cuda")
+    # оно жрёт порядка 1 терабайта диска
+    # model_name = "facebook/wav2vec2-base-960h"
+    # feature_extractor = Wav2Vec2FeatureExtractor.from_pretrained(model_name)
+    # model = Wav2Vec2Model.from_pretrained(model_name).to("cuda")
     
-    for ind_start in tqdm(range(0, len(manifest), args.batch_size)):
-        batch = manifest[ind_start: ind_start + args.batch_size]
-        raw_speech = [sf.read(sample["audio_filepath"])[0] for sample in batch]
-        features = feature_extractor(raw_speech=raw_speech, padding="longest", sampling_rate=16000, return_tensors="pt")['input_values']
-        features = features.to("cuda")
-        with torch.no_grad():
-            embs = model(features).last_hidden_state.detach().cpu()
-        for ind in range(len(batch)):
-            torch.save(embs[ind], batch[ind]["audio_filepath"].replace(".flac", ".pt"))
+    # for ind_start in tqdm(range(0, len(manifest), args.batch_size)):
+    #     batch = manifest[ind_start: ind_start + args.batch_size]
+    #     raw_speech = [sf.read(sample["audio_filepath"])[0] for sample in batch]
+    #     features = feature_extractor(raw_speech=raw_speech, padding="longest", sampling_rate=16000, return_tensors="pt")['input_values']
+    #     features = features.to("cuda")
+    #     with torch.no_grad():
+    #         embs = model(features).last_hidden_state.detach().cpu()
+    #     for ind in range(len(batch)):
+    #         torch.save(embs[ind], batch[ind]["audio_filepath"].replace(".flac", ".pt"))
     
-    del feature_extractor
-    del model
+    # del feature_extractor
+    # del model
 
-    new_data = [
-        {
-            "audio_emb_path": sample['audio_filepath'].replace(".flac", ".pt"),
-            "duration": sample['duration'],
-            "text": sample['text']
-        }
-        for sample in manifest
-    ]
+    # new_data = [
+    #     {
+    #         "audio_emb_path": sample['audio_filepath'].replace(".flac", ".pt"),
+    #         "duration": sample['duration'],
+    #         "text": sample['text']
+    #     }
+    #     for sample in manifest
+    # ]
 
     # дописать построение эмбеддингов для текста
 
@@ -75,16 +74,16 @@ def main(args):
             results = lm.get_diffusion_latent(encoder_outputs, data['attention_mask']).detach().cpu()
         
         for ind in range(len(batch)):
-            torch.save(results[ind], batch[ind]["audio_filepath"].replace(".flac", "") + "ref_emb.pt")
+            torch.save(results[ind], batch[ind]["audio_filepath"].replace(".flac", "_ref_emb.pt"))
         
     new_data = [
         {
-            "audio_emb_path": sample['audio_emb_path'],
-            "text_emb_path": sample['audio_emb_path'].replace(".pt", "") + "ref_emb.pt",
+            "audio_filepath": sample['audio_filepath'],
+            "text_emb_path": sample['audio_filepath'].replace(".flac", "_ref_emb.pt"),
             "duration": sample['duration'],
             "text": sample['text']
         }
-        for sample in new_data
+        for sample in manifest
     ]
 
     json_object = json.dumps(new_data, indent=4)
@@ -112,7 +111,7 @@ if __name__ == "__main__":
     parser.add_argument(
         '--batch_size',
         type=int,
-        default=128,
+        default=64,
         help="batch size for embedding model"
     )
     args = parser.parse_args()
