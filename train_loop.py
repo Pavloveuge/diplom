@@ -71,4 +71,5 @@ def train_loop(config, model, noise_scheduler, optimizer, train_dataloader, lr_s
 
         if accelerator.is_main_process:
             # в оригинале здесь валидация и сохранение чекпоинтов
-            pass
+            if (epoch % config['save_checkpoint_every_epoch'] == 0) and (epoch != 0):
+                torch.save(model.state_dict(), f"{config['output_dir']}/noise_predictor_epoch_{epoch}")

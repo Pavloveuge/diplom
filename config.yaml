@@ -1,7 +1,8 @@
 num_diffusion_trainig_steps: 200
 num_epochs: 100
+save_checkpoint_every_epoch: 5
 
-path_to_train_dataset: /diplom/diplom/emb_train_librispeech_100_manifest.json
+path_to_train_dataset: /diplom/diplom/train-clean-100h-embs.json
 #path_to_val_dataset: 
 
 alphabet: "abcdefghijklmnopqrstuvwxyz "
@@ -17,11 +18,11 @@ collate_fn: !name:data_collator.custom_collate_function
 noise_schedule: !new:diffusers.DDPMScheduler
   num_train_timesteps: !ref <num_diffusion_trainig_steps>
 
-output_dir: checkpoints
+output_dir: debug_exp
 mixed_precision: fp16
 dtype: !name:torch.float32
 gradient_accumulation_steps: 1
-batch_size: 16
+batch_size: 70
 gradient_clip_norm: 10
 
 drop_cond_prob: 0.1
