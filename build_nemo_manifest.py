@@ -26,5 +26,5 @@ def build_manifest(subset_paths, subset):
                                 fout.write('\n')
                             
 build_manifest([
-        '/diplom/LibriSpeech/train-clean-100',
-    ], 'train-100')
+        '/data/LibriSpeech',
+    ], 'train-460')

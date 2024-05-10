@@ -12,9 +12,9 @@ def train(config):
     optimizer = config['optimizer'](model.parameters())
     dataset = config['dataset']
     lr_scheduler = get_scheduler(name=config['lr_scheduler_type'], optimizer=optimizer, num_warmup_steps=config['warmup_steps'], 
-    num_training_steps=len(dataset) * config['num_epochs'] // config['batch_size'])
+    num_training_steps=len(dataset) * config['num_epochs'] // config['batch_size'],)
 
-    train_dataloader = DataLoader(dataset, batch_size=config['batch_size'], collate_fn=config['collate_fn'])
+    train_dataloader = DataLoader(dataset, batch_size=config['batch_size'], collate_fn=config['collate_fn'], num_workers=1)
     
     train_loop(
         config=config,

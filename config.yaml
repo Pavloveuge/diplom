@@ -1,8 +1,8 @@
 num_diffusion_trainig_steps: 200
 num_epochs: 10000
-save_checkpoint_every_epoch: 10
+save_checkpoint_every_epoch: 30
 
-path_to_train_dataset: /diplom/diplom/train-clean-100h-embs.json
+path_to_train_dataset: /diplom/460h_librispeech_audio_and_text_emb_manifest.json
 #path_to_val_dataset: 
 
 alphabet: "abcdefghijklmnopqrstuvwxyz "
@@ -18,17 +18,17 @@ collate_fn: !name:data_collator.custom_collate_function
 noise_schedule: !new:diffusers.DDPMScheduler
   num_train_timesteps: !ref <num_diffusion_trainig_steps>
 
-output_dir: first_exp_new_vae_batch_768
-mixed_precision: no
-dtype: !name:torch.float32
-gradient_accumulation_steps: 2
-batch_size: 128
+output_dir: scaling_exp
+mixed_precision: bf16
+dtype: !name:torch.bfloat16
+gradient_accumulation_steps: 1
+batch_size: 96
 gradient_clip_norm: 10
 
 drop_cond_prob: 0.1
 
 # параметры для модели
-cond_emb_dim: 768
+cond_emb_dim: 1024
 dim_ae: 64
 num_encoder_latents: 32
 dim: 768 # размерность трансформера
@@ -36,9 +36,9 @@ conv_pos: 32
 conv_pos_groups: 4
 t_emb_dim: 768
 t_emb_max_period: 10000 
-cond_cross_attn_layers: [0, 3, 6, 9]
+cond_cross_attn_layers: [0, 4, 8, 12, 16, 20]
 nheads: 8
-layers: 12
+layers: 24
 dropout: 0.1
 attention_type: normal
 # просто скопировал параметры, не юзаю их
@@ -49,6 +49,6 @@ model: !name:model.NoisePredictor
 
 
 optimizer: !name:torch.optim.Adam
-  lr: 0.00005
+  lr: 0.0002
 lr_scheduler_type: linear
-warmup_steps: 10000
+warmup_steps: 30000

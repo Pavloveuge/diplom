@@ -1,18 +1,23 @@
 import os
 import torch
 import torch.nn.functional as F
+from datetime import timedelta
 
 from accelerate import Accelerator
 from tqdm import tqdm
+from accelerate.utils import InitProcessGroupKwargs
+
 
 
 def train_loop(config, model, noise_scheduler, optimizer, train_dataloader, lr_scheduler):
-    # Initialize accelerator and tensorboard logging
+    # Initialize accelerator and tensorboard logging    
+    kwargs = InitProcessGroupKwargs(timeout=timedelta(seconds=8000), backend="nccl")
     accelerator = Accelerator(
         mixed_precision=config['mixed_precision'],
         gradient_accumulation_steps=config['gradient_accumulation_steps'], 
         log_with="tensorboard",
-        project_dir=os.path.join(config['output_dir'], "logs")
+        project_dir=os.path.join(config['output_dir'], "logs"),
+        kwargs_handlers=[kwargs]
     )
 
     if accelerator.is_main_process:
@@ -28,7 +33,7 @@ def train_loop(config, model, noise_scheduler, optimizer, train_dataloader, lr_s
         model, optimizer, train_dataloader, lr_scheduler
     )
     
-    model.to(accelerator.device, dtype=config['dtype'])
+    #model.to(accelerator.device, dtype=config['dtype'])
 
     global_step = 0
 
@@ -43,11 +48,11 @@ def train_loop(config, model, noise_scheduler, optimizer, train_dataloader, lr_s
             text_inds = batch['text_inds']
             cond_padding_mask = batch['cond_padding_mask']
 
-            noise = torch.randn(text_embedding.shape).to(text_embedding.device)
+            noise = torch.randn(text_embedding.shape).to(accelerator.device)
             bs = audio_embedding.shape[0]
             mask = torch.ones(text_embedding.shape[0], config['num_encoder_latents'], dtype=torch.bool).to(accelerator.device)
             # Sample a random timestep for each image
-            timesteps = torch.randint(0, noise_scheduler.num_train_timesteps, (bs,), device=text_embedding.device).long()
+            timesteps = torch.randint(0, noise_scheduler.num_train_timesteps, (bs,), device=accelerator.device).long()
 
             # Add noise to the clean images according to the noise magnitude at each timestep
             # (this is the forward diffusion process)
@@ -73,4 +78,4 @@ def train_loop(config, model, noise_scheduler, optimizer, train_dataloader, lr_s
         if accelerator.is_main_process:
             # в оригинале здесь валидация и сохранение чекпоинтов
             if (epoch % config['save_checkpoint_every_epoch'] == 0) and (epoch != 0):
-                torch.save(model.state_dict(), f"{config['output_dir']}/noise_predictor_epoch_{epoch}")
+                torch.save(model.state_dict(), f"{config['output_dir']}/noise_predictor_epoch_{epoch}.ckpt")
