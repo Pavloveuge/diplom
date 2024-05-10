@@ -23,6 +23,7 @@ def train_loop(config, model, noise_scheduler, optimizer, train_dataloader, lr_s
     # Prepare everything
     # There is no specific order to remember, you just need to unpack the 
     # objects in the same order you gave them to the prepare method.
+    model.training = True
     model, optimizer, train_dataloader, lr_scheduler = accelerator.prepare(
         model, optimizer, train_dataloader, lr_scheduler
     )
@@ -37,7 +38,7 @@ def train_loop(config, model, noise_scheduler, optimizer, train_dataloader, lr_s
         progress_bar.set_description(f"Epoch {epoch}")
 
         for step, batch in enumerate(train_dataloader):
-            audio_embedding = batch['audio_embedding']
+            audio_embedding = batch['audio_embedding'].to(torch.float32)
             text_embedding = batch['text_embedding']
             text_inds = batch['text_inds']
             cond_padding_mask = batch['cond_padding_mask']

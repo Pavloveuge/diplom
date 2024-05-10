@@ -1,6 +1,6 @@
 num_diffusion_trainig_steps: 200
-num_epochs: 100
-save_checkpoint_every_epoch: 5
+num_epochs: 10000
+save_checkpoint_every_epoch: 10
 
 path_to_train_dataset: /diplom/diplom/train-clean-100h-embs.json
 #path_to_val_dataset: 
@@ -18,11 +18,11 @@ collate_fn: !name:data_collator.custom_collate_function
 noise_schedule: !new:diffusers.DDPMScheduler
   num_train_timesteps: !ref <num_diffusion_trainig_steps>
 
-output_dir: debug_exp
-mixed_precision: fp16
+output_dir: first_exp_new_vae_batch_768
+mixed_precision: no
 dtype: !name:torch.float32
-gradient_accumulation_steps: 1
-batch_size: 70
+gradient_accumulation_steps: 2
+batch_size: 128
 gradient_clip_norm: 10
 
 drop_cond_prob: 0.1
@@ -49,6 +49,6 @@ model: !name:model.NoisePredictor
 
 
 optimizer: !name:torch.optim.Adam
-  lr: 0.001
+  lr: 0.00005
 lr_scheduler_type: linear
 warmup_steps: 10000

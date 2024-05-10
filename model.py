@@ -6,8 +6,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch import Tensor
 
-from modules import MultiheadAttention, AbsolutePositionalEmbedding
-
+from modules import MultiheadAttention, AbsolutePositionalEmbedding, MultiHeadAttention
 
 # ------------------------
 # Code adapted from OpenAI guided diffusion repo
@@ -125,12 +124,14 @@ class Pogfuse(nn.Module):
                                 gru_rel_pos=True,
             )
         else:
-            self.self_attn = nn.MultiheadAttention(dim, nheads, dropout=dropout, batch_first=True)
+            self.self_attn = MultiHeadAttention(nheads, dim, dropout_rate=dropout)
         # Implementation of Feedforward model
         self.linear1 = nn.Linear(dim, dim*d_ff_mult)
         self.dropout = nn.Dropout(dropout)
         self.linear2 = nn.Linear(dim*d_ff_mult, dim)
 
+        self.norm_cond = nn.LayerNorm(dim, eps=layer_norm_eps)
+        self.norm0 = nn.LayerNorm(dim, eps=layer_norm_eps)
         self.norm1 = nn.LayerNorm(dim, eps=layer_norm_eps)
         self.norm2 = nn.LayerNorm(dim, eps=layer_norm_eps)
         self.dropout1 = nn.Dropout(dropout)
@@ -158,10 +159,13 @@ class Pogfuse(nn.Module):
         x += t + c_pool # (bs, seq_len, dim)
         # -----------------------
         # 2. Get and append conditioning embeddings
-        if self.add_cond_seq: c = self.cond_layers(cond_emb) # (bs, seq_len2, dim)
-        else: c = None
+        if self.add_cond_seq: 
+            c = self.cond_layers(cond_emb) # (bs, seq_len2, dim)
+        else: 
+            c = None
         # -----------------------
         # 3. Do transformer layer
+        x = self.norm0(x)
         x1, pos_bias = self._sa_block(x, c, x_padding_mask=x_padding_mask, c_padding_mask=cond_padding_mask, pos_bias=pos_bias)
         x = self.norm1(x + x1)
         x = self.norm2(x + self._ff_block(x))
@@ -197,10 +201,9 @@ class Pogfuse(nn.Module):
                                 position_bias=pos_bias)
             x = x.permute(1, 0, 2) # swap back (seq_len, bs, dim) -> (bs, seq_len, dim)
         else:
+            kv = self.norm_cond(kv)
             x = self.self_attn(x, kv, kv,
-                            attn_mask=attn_mask,
-                            key_padding_mask=key_padding_mask,
-                            need_weights=False)[0]
+                            mask=attn_mask)
         return self.dropout1(x), pos_bias
 
     # feed forward block
@@ -217,7 +220,6 @@ class NoisePredictor(nn.Module):
         self.layers = []
         
         self.input_proj = nn.Linear(self.cfg['dim_ae'], self.cfg['dim'])
-        self.pos_embedding = AbsolutePositionalEmbedding(self.cfg['dim'], max_seq_len)
         self.conditioning_pos_emb = RelativePositionalEncoder(self.cfg['cond_emb_dim'], self.cfg['conv_pos'], self.cfg['conv_pos_groups'])
     
         for i in range(cfg['layers']):
@@ -257,7 +259,6 @@ class NoisePredictor(nn.Module):
         """
 
         bs = x.shape[0]
-        pos_emb = self.pos_embedding(x)
         
         t_emb = timestep_embedding(t, self.cfg['t_emb_dim'], self.cfg['t_emb_max_period'], dtype=cond_emb.dtype) # (bs, t_dim)
 
@@ -275,6 +276,7 @@ class NoisePredictor(nn.Module):
         # set mask for these conditional entries to true everywhere (i.e. mask them out)
         pooled_cond_emb = cond_emb.mean(dim=1)
         cond_emb = self.conditioning_pos_emb(cond_emb)
+    
 
         if cond_padding_mask.all() == False:
             denoms = ((~cond_padding_mask).sum(dim=1)[:, None]).to(cond_emb.dtype)
@@ -284,12 +286,12 @@ class NoisePredictor(nn.Module):
         cond_padding_mask[zero_cond_inds] = True
         cond_emb[zero_cond_inds] = 0
         pooled_cond_emb[zero_cond_inds] = 0
-        
+
         # 3. Iterate through layers
         x = self.input_proj(x)
         pos_bias = None
         for i, layer in enumerate(self.layers):
-            x, pos_bias = layer(x, t_emb, pooled_cond_emb, cond_emb, pos_bias=pos_bias)
+            x, pos_bias = layer(x, t_emb, pooled_cond_emb, cond_emb, mask, cond_padding_mask, pos_bias=pos_bias)
         # 4. Pass through head to get logits
         x = self.head(x) # (bs, seq_len, vocab size)
 
