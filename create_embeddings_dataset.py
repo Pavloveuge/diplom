@@ -18,19 +18,20 @@ from tqdm import tqdm
 def main(args):
     with open(args.path_to_manifest) as f:
         manifest = [json.loads(line) for line in f]
-    model_name = "facebook/wav2vec2-base-960h"
+    model_name = "facebook/wav2vec2-large"
+    device = "cuda:" + args.device_number
     feature_extractor = Wav2Vec2FeatureExtractor.from_pretrained(model_name)
-    model = Wav2Vec2Model.from_pretrained(model_name).to("cuda")
+    model = Wav2Vec2Model.from_pretrained(model_name).to(device)
     
     for ind_start in tqdm(range(0, len(manifest), args.batch_size)):
         batch = manifest[ind_start: ind_start + args.batch_size]
         raw_speech = [sf.read(sample["audio_filepath"])[0] for sample in batch]
         features = feature_extractor(raw_speech=raw_speech, padding="longest", sampling_rate=16000, return_tensors="pt")['input_values']
-        features = features.to("cuda")
+        features = features.to(device)
         with torch.no_grad():
             embs = model(features).last_hidden_state.detach().cpu()
         for ind in range(len(batch)):
-            torch.save(embs[ind], batch[ind]["audio_filepath"].replace(".flac", ".pt"))
+            torch.save(embs[ind].clone(), batch[ind]["audio_filepath"].replace(".flac", ".pt"))
     
     del feature_extractor
     del model
@@ -58,7 +59,7 @@ def main(args):
     model_weights = torch.load(args.path_to_dir_with_text_vae + "/model.pt")
     lm.load_state_dict(model_weights['model'])
 
-    lm = lm.to("cuda")
+    lm = lm.to(device)
     lm.eval()
 
     tokenizer = AutoTokenizer.from_pretrained(text_vae_args['enc_dec_model'])
@@ -67,7 +68,7 @@ def main(args):
         batch = manifest[ind_start: ind_start + args.batch_size]
         batch_refs = [sample['text'].lower().strip() for sample in batch]
         data = tokenizer(batch_refs, return_tensors="pt", max_length=text_vae_args['max_seq_len'], padding=True, truncation=True)
-        data = data.to("cuda")
+        data = data.to(device)
 
 
         with torch.inference_mode():
@@ -75,7 +76,7 @@ def main(args):
             results = lm.get_diffusion_latent(encoder_outputs, data['attention_mask']).detach().cpu()
         
         for ind in range(len(batch)):
-            torch.save(results[ind], batch[ind]["audio_filepath"].replace(".flac", "") + "ref_emb.pt")
+            torch.save(results[ind].clone(), batch[ind]["audio_filepath"].replace(".flac", "") + "ref_emb.pt")
         
     new_data = [
         {
@@ -112,8 +113,14 @@ if __name__ == "__main__":
     parser.add_argument(
         '--batch_size',
         type=int,
-        default=128,
+        default=64,
         help="batch size for embedding model"
+    )
+    parser.add_argument(
+        '--device_number',
+        type=str,
+        default="0",
+        help="device number for concat with cuda:"
     )
     args = parser.parse_args()
 
